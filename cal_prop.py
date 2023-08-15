@@ -28,10 +28,9 @@ r = pool.map_async(cal_prop, smiles)
 data = r.get()
 pool.close()
 pool.join()
-w = open(args.output_filename, 'w')
-for d in data:
-    if d is None:
-        continue
-    w.write(d[0] + '\t' + str(d[1]) + '\t'+ str(d[2]) + '\t'+ str(d[3]) + '\n')
-w.close()    
+with open(args.output_filename, 'w') as w:
+    for d in data:
+        if d is None:
+            continue
+        w.write(d[0] + '\t' + str(d[1]) + '\t'+ str(d[2]) + '\t'+ str(d[3]) + '\n')    
 

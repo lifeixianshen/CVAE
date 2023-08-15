@@ -27,24 +27,20 @@ class CVAE():
         self.Y = tf.placeholder(tf.int32, [self.batch_size, None])
         self.C = tf.placeholder(tf.float32, [self.batch_size, self.num_prop])
         self.L = tf.placeholder(tf.int32, [self.batch_size])
-        
 
-        
-        decoded_rnn_size = [self.unit_size for i in range(self.n_rnn_layer)]
-        encoded_rnn_size = [self.unit_size for i in range(self.n_rnn_layer)]
-        
+
+
+        decoded_rnn_size = [self.unit_size for _ in range(self.n_rnn_layer)]
+        encoded_rnn_size = [self.unit_size for _ in range(self.n_rnn_layer)]
+
         with tf.variable_scope('decode'):
-            decode_cell=[]
-            for i in decoded_rnn_size[:]:
-                decode_cell.append(tf.nn.rnn_cell.LSTMCell(i))
+            decode_cell = [tf.nn.rnn_cell.LSTMCell(i) for i in decoded_rnn_size[:]]
             self.decoder = tf.nn.rnn_cell.MultiRNNCell(decode_cell)
-        
+
         with tf.variable_scope('encode'):
-            encode_cell=[]
-            for i in encoded_rnn_size[:]:
-                encode_cell.append(tf.nn.rnn_cell.LSTMCell(i))
+            encode_cell = [tf.nn.rnn_cell.LSTMCell(i) for i in encoded_rnn_size[:]]
             self.encoder = tf.nn.rnn_cell.MultiRNNCell(encode_cell)
-        
+
         self.weights = {}
         self.biases = {}
         self.eps = {
@@ -53,7 +49,7 @@ class CVAE():
 
 
         self.weights['softmax'] = tf.get_variable("softmaxw", initializer=tf.random_uniform(shape=[decoded_rnn_size[-1], self.vocab_size], minval = -0.1, maxval = 0.1))       
-        
+
         self.biases['softmax'] =  tf.get_variable("softmaxb", initializer=tf.zeros(shape=[self.vocab_size]))
         self.weights['out_mean'] = tf.get_variable("outmeanw", initializer=tf.contrib.layers.xavier_initializer(), shape=[self.unit_size, self.latent_size]),
         self.weights['out_log_sigma'] = tf.get_variable("outlogsigmaw", initializer=tf.contrib.layers.xavier_initializer(), shape=[self.unit_size, self.latent_size]),
@@ -62,7 +58,7 @@ class CVAE():
 
         self.embedding_encode = tf.get_variable(name = 'encode_embedding', shape = [self.latent_size, self.vocab_size], initializer = tf.random_uniform_initializer( minval = -0.1, maxval = 0.1))
         self.embedding_decode = tf.get_variable(name = 'decode_embedding', shape = [self.latent_size, self.vocab_size], initializer = tf.random_uniform_initializer( minval = -0.1, maxval = 0.1))
-        
+
         self.latent_vector, self.mean, self.log_sigma = self.encode()
 
         self.decoded, decoded_logits = self.decode(self.latent_vector)
@@ -77,11 +73,11 @@ class CVAE():
 
         # Loss
 
-        self.loss = self.latent_loss + self.reconstr_loss 
+        self.loss = self.latent_loss + self.reconstr_loss
         #self.loss = self.reconstr_loss 
         optimizer    = tf.train.AdamOptimizer(self.lr)
         self.opt = optimizer.minimize(self.loss)
-        
+
         self.mol_pred = tf.argmax(self.decoded, axis=2)
         self.sess = tf.Session()
 
@@ -113,7 +109,13 @@ class CVAE():
         C = tf.tile(C, [1, tf.shape(self.X)[1], 1])
         X = tf.nn.embedding_lookup(self.embedding_encode, self.X)
         inputs = tf.concat([new_Z, X, C], axis=-1)
-        self.initial_decoded_state = tuple([tf.contrib.rnn.LSTMStateTuple(tf.zeros((self.batch_size, self.unit_size)), tf.zeros((self.batch_size, self.unit_size))) for i in range(3)])
+        self.initial_decoded_state = tuple(
+            tf.contrib.rnn.LSTMStateTuple(
+                tf.zeros((self.batch_size, self.unit_size)),
+                tf.zeros((self.batch_size, self.unit_size)),
+            )
+            for _ in range(3)
+        )
         #self.initial_decoded_state=self.decoder.zero_state() 
         Y, self.output_decoded_state = tf.nn.dynamic_rnn(self.decoder, inputs, dtype=tf.float32, scope = 'decode', sequence_length = self.L, initial_state=self.initial_decoded_state)
         Y = tf.reshape(Y, [self.batch_size*seq_length, -1])
@@ -136,8 +138,7 @@ class CVAE():
         return self.sess.run(self.latent_vector, feed_dict={self.X : x, self.C : c, self.L : l})
 
     def cal_latent_loss(self, mean, log_sigma):
-        latent_loss = tf.reduce_mean(-0.5*(1+log_sigma-tf.square(mean)-tf.exp(log_sigma)))
-        return latent_loss
+        return tf.reduce_mean(-0.5*(1+log_sigma-tf.square(mean)-tf.exp(log_sigma)))
     
     def train(self, x, y, l, c):
         _, r_loss, l_loss = self.sess.run([self.opt, self.reconstr_loss, self.latent_loss], feed_dict = {self.X :x, self.Y:y, self.L : l, self.C : c})
